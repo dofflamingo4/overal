@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Overal</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-today" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-week" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4m0 0h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  </svg>
+
+  <form id="login" hidden>
+    <h1>Overal</h1>
+    <p class="sub">Je dag, overal bij.</p>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="email" inputmode="email" required>
+    <label for="password">Wachtwoord</label>
+    <input id="password" type="password" autocomplete="current-password" minlength="8" required>
+    <button class="primary">Inloggen</button>
+    <p id="loginMsg" role="status" aria-live="polite"></p>
+  </form>
+
+  <main id="app" hidden>
+    <header>
+      <p id="dateLine" class="eyebrow"></p>
+      <h1 id="title">Vandaag</h1>
+      <p id="synced" class="status" aria-live="polite"></p>
+    </header>
+
+    <section data-tab="vandaag" aria-labelledby="title">
+      <div id="focus" class="focus" aria-live="polite"></div>
+      <ol id="today" class="timeline"></ol>
+      <h2>Deadlines</h2>
+      <ul id="deadlinesSoon" class="deadlines"></ul>
+    </section>
+
+    <section data-tab="week" hidden aria-labelledby="title">
+      <div id="week"></div>
+    </section>
+
+    <section data-tab="deadlines" hidden aria-labelledby="title">
+      <ul id="deadlinesAll" class="deadlines"></ul>
+    </section>
+
+    <section data-tab="notities" hidden aria-labelledby="title">
+      <form id="noteForm" class="add">
+        <label for="noteInput" class="sr-only">Nieuwe notitie</label>
+        <input id="noteInput" placeholder="Idee, taak of notitie" maxlength="10000" enterkeyhint="done" required>
+        <button class="icon primary" aria-label="Notitie toevoegen"><svg><use href="#i-plus"/></svg></button>
+      </form>
+      <ul id="notes" class="notes"></ul>
+    </section>
+
+    <section data-tab="avond" hidden aria-labelledby="title">
+      <form id="checkinForm" class="checkin">
+        <label for="checkinInput">Wat werkte vandaag, en wat liep vast?</label>
+        <textarea id="checkinInput" rows="4" maxlength="10000" required></textarea>
+        <button class="primary">Opslaan</button>
+      </form>
+      <h2>Vorige avonden</h2>
+      <ul id="checkins" class="notes"></ul>
+      <button id="logout" class="link danger">Uitloggen</button>
+    </section>
+
+    <nav aria-label="Hoofdmenu">
+      <button data-go="vandaag" aria-current="page"><svg><use href="#i-today"/></svg>Vandaag</button>
+      <button data-go="week"><svg><use href="#i-week"/></svg>Week</button>
+      <button data-go="deadlines"><svg><use href="#i-flag"/></svg>Deadlines</button>
+      <button data-go="notities"><svg><use href="#i-note"/></svg>Notities</button>
+      <button data-go="avond"><svg><use href="#i-moon"/></svg>Avond</button>
+    </nav>
+  </main>
+</body>
+</html>
