@@ -115,14 +115,20 @@ async function mutate(query) {
   loadNotes();
 }
 
-function addNote(input, kind) {
+// The text is only cleared once the database confirmed it, so nothing is lost on a bad connection or an expired login.
+async function addNote(input, kind, feedback) {
   const body = input.value.trim();
   if (!body) return;
+  const say = (text, ok) => { if (feedback) { feedback.textContent = text; feedback.className = 'saved' + (ok ? '' : ' error'); } };
+  say('Opslaan…', true);
+  const { error } = await db.from('notes').insert({ body, kind });
+  if (error) return say('Niet opgeslagen: ' + error.message + '. Je tekst staat er nog; probeer opnieuw.', false);
   input.value = '';
-  mutate(db.from('notes').insert({ body, kind }));
+  say(kind === 'checkin' ? 'Opgeslagen ✓ Je tip voor morgen volgt rond 22u.' : 'Opgeslagen ✓', true);
+  loadNotes();
 }
 $('noteForm').addEventListener('submit', (e) => { e.preventDefault(); addNote($('noteInput'), 'note'); });
-$('checkinForm').addEventListener('submit', (e) => { e.preventDefault(); addNote($('checkinInput'), 'checkin'); });
+$('checkinForm').addEventListener('submit', (e) => { e.preventDefault(); addNote($('checkinInput'), 'checkin', $('checkinSaved')); });
 
 // ---- render ----
 function focusCard(i, label, when, cls) {
