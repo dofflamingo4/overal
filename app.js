@@ -175,6 +175,48 @@ function render() {
   list($('checkins'), notes.filter((n) => n.kind === 'checkin'), checkinEl, 'Nog geen avondchecks.');
 }
 
+// ---- push notifications (sent by the Supabase Edge Function "notify", also when the app is closed) ----
+const NOTIFY_URL = 'https://uizhyrexbiagykzxqmct.supabase.co/functions/v1/notify';
+const b64ToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0));
+const pushMsg = (text) => { $('pushState').textContent = text; };
+
+async function refreshPushState() {
+  if (!('PushManager' in window) || !('Notification' in window)) {
+    $('pushOn').disabled = true;
+    return pushMsg('Meldingen werken alleen als je de app opent via het icoon op je beginscherm (iPhone met iOS 16.4 of nieuwer).');
+  }
+  const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+  $('pushOn').hidden = !!sub;
+  $('pushTest').hidden = !sub;
+  if (sub) pushMsg('Meldingen staan aan op dit toestel.');
+  else if (Notification.permission === 'denied') pushMsg('Meldingen zijn geweigerd. Zet ze aan via Instellingen › Meldingen › Overal.');
+}
+
+$('pushOn').addEventListener('click', async () => {
+  $('pushOn').disabled = true;
+  try {
+    if (await Notification.requestPermission() !== 'granted') return refreshPushState();
+    const { publicKey } = await (await fetch(NOTIFY_URL + '?action=key')).json();
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) })).toJSON();
+    const { error } = await db.from('push_subscriptions').upsert({ endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth });
+    if (error) throw error;
+    await refreshPushState();
+  } catch (err) {
+    pushMsg('Aanzetten mislukt: ' + err.message);
+  } finally {
+    $('pushOn').disabled = false;
+  }
+});
+
+$('pushTest').addEventListener('click', async () => {
+  pushMsg('Testmelding versturen…');
+  const { data } = await db.auth.getSession();
+  const res = await fetch(NOTIFY_URL + '?action=test', { method: 'POST', headers: { Authorization: 'Bearer ' + data.session?.access_token } });
+  const out = await res.json().catch(() => ({}));
+  pushMsg(res.ok && out.sent ? 'Verstuurd. Je zou hem nu moeten zien.' : 'Versturen mislukt' + (out.error ? ': ' + out.error : '.'));
+});
+
 // ---- tabs ----
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('nav button').forEach((x) => x.toggleAttribute('aria-current', x === b));
@@ -184,4 +226,9 @@ document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click
   if (b.dataset.go === 'week') document.querySelector('.day.today')?.scrollIntoView({ block: 'start' });
 }));
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+// A notification can deep-link to a tab, e.g. ./#avond for the evening check-in.
+const openTab = () => document.querySelector(`nav button[data-go="${location.hash.slice(1)}"]`)?.click();
+window.addEventListener('hashchange', openTab);
+openTab();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(refreshPushState);
