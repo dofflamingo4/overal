@@ -9,14 +9,32 @@ export function mondayIso(date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Items of one day (0 = monday) from the pushed planner, sorted, with a status for the current day. */
-export function dayItems(planner, date, now = date) {
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const minuteOf = (d) => d.getHours() * 60 + d.getMinutes();
+
+/** Apple Agenda events on `date`: timed ones as timeline items, all-day ones (start/end dates, end exclusive) apart. */
+export function appleForDay(events = [], date) {
+  const iso = isoDate(date);
+  const day = (date.getDay() + 6) % 7;
+  const timed = [];
+  const allDay = [];
+  for (const e of events) {
+    if (e.allDay) { if (e.start <= iso && iso < e.end) allDay.push(e); continue; }
+    const start = new Date(e.start);
+    const end = new Date(e.end);
+    if (start.toDateString() !== date.toDateString()) continue;
+    timed.push({ id: `apple-${e.start}-${e.title}`, kind: 'apple', day, start: minuteOf(start), end: end.toDateString() === date.toDateString() ? minuteOf(end) : 24 * 60, title: e.title, note: e.location });
+  }
+  return { timed, allDay };
+}
+
+/** Items of one day (0 = monday) from the pushed planner plus `extra` (Apple Agenda), sorted, with a status for the current day. */
+export function dayItems(planner, date, now = date, extra = []) {
   const week = planner?.weeks?.find((w) => w.weekStart === mondayIso(date));
-  if (!week) return [];
   const day = (date.getDay() + 6) % 7;
   const sameDay = now.toDateString() === date.toDateString();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  return week.items
+  return [...(week?.items ?? []), ...extra]
     .filter((i) => i.day === day && !i.cancelled)
     .sort((a, b) => a.start - b.start)
     .map((i) => ({ ...i, status: !sameDay ? '' : i.end <= nowMin ? 'past' : i.start <= nowMin ? 'now' : '' }));

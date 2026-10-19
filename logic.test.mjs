@@ -1,6 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hhmm, mondayIso, dayItems, openDeadlines, nowNext, untilText, dueLabel } from './logic.js';
+import { hhmm, mondayIso, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay } from './logic.js';
+
+test('appleForDay splits timed and all-day events and merges into the day', () => {
+  const tue = new Date(2026, 9, 20, 12, 0);
+  const events = [
+    { title: 'Tandarts', location: 'Aalst', start: new Date(2026, 9, 20, 16, 0).toISOString(), end: new Date(2026, 9, 20, 16, 30).toISOString(), allDay: false },
+    { title: 'Morgen', start: new Date(2026, 9, 21, 9, 0).toISOString(), end: new Date(2026, 9, 21, 10, 0).toISOString(), allDay: false },
+    { title: 'Verlof', start: '2026-10-19', end: '2026-10-21', allDay: true },
+  ];
+  const { timed, allDay } = appleForDay(events, tue);
+  assert.deepEqual(timed.map((i) => [i.title, i.start, i.end, i.kind]), [['Tandarts', 960, 990, 'apple']]);
+  assert.deepEqual(allDay.map((e) => e.title), ['Verlof']);
+  assert.equal(appleForDay(events, new Date(2026, 9, 21)).allDay.length, 0); // end date is exclusive
+  assert.deepEqual(dayItems(null, tue, tue, timed).map((i) => i.title), ['Tandarts']); // works without planner data
+});
 
 test('nowNext finds the running and the upcoming block', () => {
   const items = [{ id: 'a', status: 'past' }, { id: 'b', status: 'now' }, { id: 'c', status: '' }, { id: 'd', status: '' }];

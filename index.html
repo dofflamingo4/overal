@@ -43,6 +43,7 @@
     </header>
 
     <section data-tab="vandaag" aria-labelledby="title">
+      <ul id="allDay" class="allday"></ul>
       <div id="focus" class="focus" aria-live="polite"></div>
       <ol id="today" class="timeline"></ol>
       <h2>Deadlines</h2>
@@ -79,6 +80,26 @@
           <button id="pushOn" class="primary">Meldingen aanzetten</button>
           <button id="pushTest" class="link" hidden>Testmelding sturen</button>
         </div>
+      </div>
+      <h2>Apple Agenda</h2>
+      <div class="push">
+        <p id="calState" class="hint" aria-live="polite">Koppel je Apple Agenda om je afspraken hier en in je meldingen te zien.</p>
+        <ul id="feeds" class="feeds"></ul>
+        <form id="feedForm" class="add">
+          <label for="feedInput" class="sr-only">Link van je publieke agenda</label>
+          <input id="feedInput" type="url" inputmode="url" placeholder="webcal://p…-caldav.icloud.com/published/…" autocomplete="off" required>
+          <button class="primary">Koppelen</button>
+        </form>
+        <details class="help">
+          <summary>Waar vind ik die link?</summary>
+          <ol>
+            <li>Open de app <b>Agenda</b> op je iPhone en tik onderaan op <b>Agenda's</b>.</li>
+            <li>Tik op <b>ⓘ</b> naast de agenda die je wil koppelen.</li>
+            <li>Zet <b>Publieke agenda</b> aan en tik op <b>Deel link…</b> › <b>Kopieer</b>.</li>
+            <li>Plak de link hierboven en tik op <b>Koppelen</b>. Herhaal voor elke agenda.</li>
+          </ol>
+          <p>Wie deze link heeft, kan die agenda lezen. Deel hem met niemand anders.</p>
+        </details>
       </div>
       <h2>Vorige avonden</h2>
       <ul id="checkins" class="notes"></ul>

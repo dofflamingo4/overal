@@ -3,7 +3,7 @@
 :root {
   --bg: #f4f2ee; --surface: #ffffff; --surface-2: #ebe8e2; --text: #1b1d22; --muted: #5f636c; --line: #dcd8d0;
   --accent: #2557c7; --on-accent: #fff; --danger: #b42318;
-  --les: #2557c7; --opt: #6f86b8; --reis: #6b7079; --studie: #1f7a52; --extra: #6941c6; --deadline: #b54708; --werk: #b42318;
+  --les: #2557c7; --opt: #6f86b8; --reis: #6b7079; --studie: #1f7a52; --extra: #6941c6; --deadline: #b54708; --werk: #b42318; --apple: #c11574;
   --late: #b42318; --today: #b54708; --soon: #8a6d00;
   --r-sm: 10px; --r: 16px; --pad: 14px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -14,7 +14,7 @@
   :root {
     --bg: #0e1116; --surface: #171b22; --surface-2: #1f242d; --text: #e9ecf1; --muted: #9aa1ad; --line: #2a303a;
     --accent: #7ea6ff; --on-accent: #0e1116; --danger: #ff8a7a;
-    --les: #7ea6ff; --opt: #94a8d4; --reis: #a0a6b0; --studie: #5fd09b; --extra: #b49cff; --deadline: #ffb366; --werk: #ff8a7a;
+    --les: #7ea6ff; --opt: #94a8d4; --reis: #a0a6b0; --studie: #5fd09b; --extra: #b49cff; --deadline: #ffb366; --werk: #ff8a7a; --apple: #ff7eb6;
     --late: #ff8a7a; --today: #ffb366; --soon: #f0d060;
     --shadow: 0 1px 2px rgb(0 0 0 / .4);
     color-scheme: dark;
@@ -122,6 +122,22 @@ ol, ul { list-style: none; margin: 0; padding: 0; }
 .notes .del:hover { color: var(--danger); background: var(--surface-2); }
 .notes .date { padding: 12px 16px 0 0; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .notes .entry { padding-left: 16px; }
+
+/* Apple Agenda: all-day chips + linked feeds */
+.allday { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.allday:empty { display: none; }
+.allday li { padding: 4px 12px; border-radius: 99px; font-size: 14px; font-weight: 500; background: color-mix(in srgb, var(--apple) 14%, transparent); color: var(--apple); }
+.feeds { display: grid; gap: 4px; }
+.feeds:empty { display: none; }
+.feeds li { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.feeds li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feeds .del { display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: none; color: var(--muted); border-radius: var(--r-sm); }
+.feeds .del:hover { color: var(--danger); background: var(--surface-2); }
+.help { font-size: 14px; color: var(--muted); }
+.help summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--accent); font-weight: 500; }
+.help ol { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+.help p { margin: 0; }
+.hint.error { color: var(--danger); }
 
 /* push settings */
 .push { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px; display: grid; gap: 12px; }

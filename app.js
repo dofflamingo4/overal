@@ -1,12 +1,14 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
-import { hhmm, dayItems, openDeadlines, nowNext, untilText, dueLabel } from './logic.js';
+import { hhmm, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay } from './logic.js';
 
 // The publishable key is meant to be public: Row Level Security limits every row to its owner.
 const db = createClient('https://uizhyrexbiagykzxqmct.supabase.co', 'sb_publishable_a0EhD2sC_LkoRgoR2F4i6A_XDtg455V');
 
 const DAYS = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
 const TITLES = { vandaag: 'Vandaag', week: 'Deze week', deadlines: 'Deadlines', notities: 'Notities', avond: 'Avondcheck' };
-const KINDS = { les: 'Les', opt: 'Werkcollege', reis: 'Reis', studie: 'Studie', extra: 'Extra', deadline: 'Deadline-werk', werk: 'Werk' };
+const KINDS = { les: 'Les', opt: 'Werkcollege', reis: 'Reis', studie: 'Studie', extra: 'Extra', deadline: 'Deadline-werk', werk: 'Werk', apple: 'Agenda' };
+// Same rule as the database check: only Apple's published-calendar links.
+const ICLOUD_FEED = /^(webcal|https):\/\/p\d+-caldav\.icloud\.com\/published\/\d+\/[A-Za-z0-9_=-]+$/;
 const STALE_MS = 2 * 3600e3; // laptop data older than this gets an orange dot
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -15,7 +17,9 @@ const color = (node, i) => { node.style.setProperty('--c', `var(--${kindOf(i)})`
 const nowMin = (d) => d.getHours() * 60 + d.getMinutes();
 
 let planner = null;
+let apple = null; // { events, error } refreshed every 5 min by the Edge Function
 let notes = [];
+let feeds = [];
 let lastError = '';
 
 // ---- login (sign-ups are closed in Supabase: only the owner's account exists) ----
@@ -38,7 +42,7 @@ let started = false;
 async function start() {
   if (started) return;
   started = true;
-  await Promise.all([loadPlanner(), loadNotes()]);
+  await Promise.all([loadPlanner(), loadNotes(), loadFeeds()]);
   // Changes made on another device arrive here within a second or two.
   db.channel('sync')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'snapshots' }, loadPlanner)
@@ -49,11 +53,43 @@ async function start() {
 }
 
 async function loadPlanner() {
-  const { data, error } = await db.from('snapshots').select('data').eq('source', 'weekplanner').maybeSingle();
+  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple']);
   if (error) return showError(error);
-  planner = data?.data ?? null;
+  planner = data.find((r) => r.source === 'weekplanner')?.data ?? null;
+  apple = data.find((r) => r.source === 'apple')?.data ?? null;
   render();
 }
+
+async function loadFeeds() {
+  const { data, error } = await db.from('calendar_feeds').select('id, url').order('created_at');
+  if (error) return showError(error);
+  feeds = data;
+  render();
+}
+
+// Ask the Edge Function to read the feeds now instead of at its next 5-minute run.
+async function refreshCalendarNow() {
+  const { data } = await db.auth.getSession();
+  await fetch(NOTIFY_URL + '?action=calendar', { method: 'POST', headers: { Authorization: 'Bearer ' + data.session?.access_token } }).catch(() => {});
+  await loadPlanner();
+}
+
+$('feedForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = $('feedInput').value.trim();
+  if (!ICLOUD_FEED.test(url)) {
+    $('calState').className = 'hint error';
+    $('calState').textContent = 'Dat is geen link van een publieke iCloud-agenda. Hij begint met webcal://p…-caldav.icloud.com/published/';
+    return;
+  }
+  $('calState').className = 'hint';
+  $('calState').textContent = 'Agenda ophalen…';
+  const { error } = await db.from('calendar_feeds').insert({ url });
+  if (error && error.code !== '23505') return showError(error); // 23505: this calendar was already linked
+  $('feedInput').value = '';
+  await loadFeeds();
+  await refreshCalendarNow();
+});
 
 async function loadNotes() {
   const { data, error } = await db.from('notes').select('*').order('created_at', { ascending: false });
@@ -137,6 +173,30 @@ function checkinEl(n) {
   return li;
 }
 
+function feedEl(f, i) {
+  const li = el('li');
+  const del = el('button', 'del');
+  del.setAttribute('aria-label', `Agenda ${i + 1} ontkoppelen`);
+  del.innerHTML = '<svg aria-hidden="true"><use href="#i-x"/></svg>';
+  del.addEventListener('click', async () => {
+    const { error } = await db.from('calendar_feeds').delete().eq('id', f.id);
+    if (error) return showError(error);
+    await loadFeeds();
+    await refreshCalendarNow();
+  });
+  li.append(el('span', null, `Agenda ${i + 1} · …${f.url.slice(-10)}`), del);
+  return li;
+}
+
+function renderCalendar() {
+  $('feeds').replaceChildren(...feeds.map(feedEl));
+  if (!feeds.length) return;
+  const s = $('calState');
+  s.className = 'hint' + (apple?.error ? ' error' : '');
+  s.textContent = apple?.error ? 'Ophalen mislukt: ' + apple.error
+    : apple ? `Gekoppeld · ${apple.events.length} afspraken in de komende 2 weken.` : 'Gekoppeld. De afspraken verschijnen binnen enkele minuten.';
+}
+
 function renderStatus(now) {
   const s = $('synced');
   const at = planner?.syncedAt;
@@ -149,7 +209,9 @@ function render() {
   $('dateLine').textContent = now.toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' });
   renderStatus(now.getTime());
 
-  const today = dayItems(planner, now);
+  const todayApple = appleForDay(apple?.events, now);
+  const today = dayItems(planner, now, now, todayApple.timed);
+  $('allDay').replaceChildren(...todayApple.allDay.map((e) => el('li', null, e.title)));
   const { now: current, next } = nowNext(today);
   $('focus').replaceChildren(
     ...(current ? [focusCard(current, 'Nu', `tot ${hhmm(current.end)}`, 'now')] : []),
@@ -165,11 +227,15 @@ function render() {
   $('week').replaceChildren(...DAYS.map((name, d) => {
     const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + d);
     const wrap = el('div', 'day' + (date.toDateString() === now.toDateString() ? ' today' : ''));
+    const dayApple = appleForDay(apple?.events, date);
     const ol = el('ol', 'timeline');
-    list(ol, dayItems(planner, date, now), blockEl, 'Vrij.');
-    wrap.append(el('h2', null, `${name} ${date.getDate()}/${date.getMonth() + 1}`), ol);
+    list(ol, dayItems(planner, date, now, dayApple.timed), blockEl, 'Vrij.');
+    const chips = el('ul', 'allday');
+    chips.append(...dayApple.allDay.map((e) => el('li', null, e.title)));
+    wrap.append(el('h2', null, `${name} ${date.getDate()}/${date.getMonth() + 1}`), chips, ol);
     return wrap;
   }));
+  renderCalendar();
 
   list($('notes'), notes.filter((n) => n.kind === 'note'), noteEl, 'Nog geen notities. Schrijf hierboven je eerste idee.');
   list($('checkins'), notes.filter((n) => n.kind === 'checkin'), checkinEl, 'Nog geen avondchecks.');
