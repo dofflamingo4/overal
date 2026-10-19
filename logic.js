@@ -40,6 +40,23 @@ export function dayItems(planner, date, now = date, extra = []) {
     .map((i) => ({ ...i, status: !sameDay ? '' : i.end <= nowMin ? 'past' : i.start <= nowMin ? 'now' : '' }));
 }
 
+// ---- evening interview ----
+export const RESULTS = { done: 'Gelukt', partly: 'Deels', not: 'Niet', na: 'N.v.t.' };
+export const BLOCKERS = ['Te moe', 'Afgeleid', 'Niet begrepen', 'Te weinig tijd', 'Werk liep uit', 'Ziek'];
+
+/** Today's blocks worth asking about: travel and cancelled blocks are skipped. */
+export const interviewBlocks = (items) => items.filter((i) => i.kind !== 'reis' && !i.cancelled);
+
+/** Readable check-in text (history list and coach) from the interview answers. */
+export function checkinSummary({ blocks = [], energy, mood, blockers = [], note = '' }) {
+  const lines = blocks.filter((b) => RESULTS[b.result]).map((b) => `${b.title}: ${RESULTS[b.result]}`);
+  if (energy) lines.push(`Energie: ${energy}/5`);
+  if (mood) lines.push(`Stemming: ${mood}/5`);
+  if (blockers.length) lines.push(`Tegengehouden door: ${blockers.join(', ')}`);
+  if (note.trim()) lines.push(`Nog iets: ${note.trim()}`);
+  return lines.join('\n');
+}
+
 /** The block running now and the next one still to start (from dayItems output of today). */
 export function nowNext(items) {
   return { now: items.find((i) => i.status === 'now') ?? null, next: items.find((i) => !i.status) ?? null };

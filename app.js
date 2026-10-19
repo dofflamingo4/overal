@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
-import { hhmm, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay } from './logic.js';
+import { hhmm, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay, RESULTS, BLOCKERS, interviewBlocks, checkinSummary } from './logic.js';
 
 // The publishable key is meant to be public: Row Level Security limits every row to its owner.
 const db = createClient('https://uizhyrexbiagykzxqmct.supabase.co', 'sb_publishable_a0EhD2sC_LkoRgoR2F4i6A_XDtg455V');
@@ -100,7 +100,7 @@ async function loadNotes() {
   const { data, error } = await db.from('notes').select('*').order('created_at', { ascending: false });
   if (error) return showError(error);
   notes = data;
-  render();
+  renderNotes(); // not on the 30 s timer: re-rendering would restart a playing voice memo
 }
 
 function showError(error) {
@@ -115,20 +115,142 @@ async function mutate(query) {
   loadNotes();
 }
 
-// The text is only cleared once the database confirmed it, so nothing is lost on a bad connection or an expired login.
-async function addNote(input, kind, feedback) {
-  const body = input.value.trim();
-  if (!body) return;
-  const say = (text, ok) => { if (feedback) { feedback.textContent = text; feedback.className = 'saved' + (ok ? '' : ' error'); } };
-  say('Opslaan…', true);
-  const { error } = await db.from('notes').insert({ body, kind });
-  if (error) return say('Niet opgeslagen: ' + error.message + '. Je tekst staat er nog; probeer opnieuw.', false);
-  input.value = '';
-  say(kind === 'checkin' ? 'Opgeslagen ✓ Je tip voor morgen volgt rond 22u.' : 'Opgeslagen ✓', true);
+const say = (node, text, ok = true) => { node.textContent = text; node.className = 'saved' + (ok ? '' : ' error'); };
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // same limit as the storage bucket
+
+// ---- notes with an optional file (photo, PDF, voice memo) in the private 'notes' bucket ----
+$('noteFile').addEventListener('change', () => {
+  const f = $('noteFile').files[0];
+  say($('noteSaved'), f ? `Bijlage: ${f.name} · tik + om op te slaan` : '');
+});
+$('noteAttach').addEventListener('click', () => $('noteFile').click());
+
+// Text and file are only cleared once the database confirmed them, so nothing is lost on a bad connection.
+$('noteForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('noteInput').value.trim();
+  const file = $('noteFile').files[0];
+  if (!text && !file) return;
+  if (file && file.size > MAX_FILE_BYTES) return say($('noteSaved'), 'Dat bestand is groter dan 25 MB.', false);
+  const row = { kind: 'note', body: text || file.name };
+  if (file) {
+    say($('noteSaved'), 'Uploaden…');
+    const { data: { session } } = await db.auth.getSession();
+    const path = `${session.user.id}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]+/g, '_').slice(-80)}`;
+    const { error } = await db.storage.from('notes').upload(path, file, { contentType: file.type || undefined });
+    if (error) return say($('noteSaved'), 'Uploaden mislukt: ' + error.message, false);
+    Object.assign(row, { file_path: path, file_name: file.name, file_type: file.type });
+  }
+  const { error } = await db.from('notes').insert(row);
+  if (error) return say($('noteSaved'), 'Niet opgeslagen: ' + error.message, false);
+  $('noteInput').value = '';
+  $('noteFile').value = '';
+  say($('noteSaved'), 'Opgeslagen ✓');
   loadNotes();
+});
+
+// Signed links to private files, reused for 50 minutes (they are valid for 60).
+const fileUrls = new Map();
+async function fileUrl(path) {
+  const hit = fileUrls.get(path);
+  if (hit && Date.now() - hit.at < 50 * 60e3) return hit.url;
+  const { data } = await db.storage.from('notes').createSignedUrl(path, 3600);
+  if (data?.signedUrl) fileUrls.set(path, { url: data.signedUrl, at: Date.now() });
+  return data?.signedUrl;
 }
-$('noteForm').addEventListener('submit', (e) => { e.preventDefault(); addNote($('noteInput'), 'note'); });
-$('checkinForm').addEventListener('submit', (e) => { e.preventDefault(); addNote($('checkinInput'), 'checkin', $('checkinSaved')); });
+
+function filePreview(n) {
+  const box = el('div', 'file');
+  fileUrl(n.file_path).then((url) => {
+    if (!url) return box.append(el('span', 'hint', 'Bestand niet gevonden'));
+    if (n.file_type?.startsWith('image/')) {
+      const a = el('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      const img = el('img');
+      img.src = url; img.alt = n.file_name; img.loading = 'lazy';
+      a.append(img);
+      box.append(a);
+    } else if (n.file_type?.startsWith('audio/')) {
+      const audio = el('audio');
+      audio.controls = true; audio.preload = 'none'; audio.src = url;
+      audio.setAttribute('aria-label', 'Spraakmemo ' + n.file_name);
+      box.append(audio);
+    } else {
+      const a = el('a', 'doc', 'PDF openen · ' + n.file_name);
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      box.append(a);
+    }
+  });
+  return box;
+}
+
+// ---- evening interview: one tap per question, built from today's blocks ----
+const ENERGY = ['Leeg', 'Laag', 'Oké', 'Goed', 'Top'];
+const MOOD = ['Slecht', 'Matig', 'Oké', 'Goed', 'Top'];
+let interviewKey = '';
+
+function segment(name, legend, options) { // options: [[value, label]]
+  const fs = el('fieldset', 'q');
+  fs.append(el('legend', null, legend));
+  const row = el('div', 'seg');
+  for (const [value, label] of options) {
+    const opt = el('label');
+    const input = el('input');
+    input.type = 'radio'; input.name = name; input.value = value;
+    opt.append(input, el('span', null, label));
+    row.append(opt);
+  }
+  fs.append(row);
+  return fs;
+}
+
+// Rebuilt only when today's blocks change, so the 30 s refresh never wipes answers you are giving.
+function renderInterview(todayItems) {
+  const blocks = interviewBlocks(todayItems);
+  const key = blocks.map((b) => b.id).join('|');
+  if (key === interviewKey) return;
+  interviewKey = key;
+  $('qBlocks').replaceChildren(...(blocks.length ? blocks.map((b, i) => {
+    const fs = segment('b' + i, `${hhmm(b.start)} ${b.title}`, Object.entries(RESULTS));
+    fs.dataset.title = b.title;
+    fs.dataset.kind = b.kind;
+    return fs;
+  }) : [el('p', 'hint', 'Geen blokken gepland vandaag, dus enkel de vragen hieronder.')]));
+}
+
+function buildBlockers() {
+  $('qBlockers').replaceChildren(...BLOCKERS.map((b) => {
+    const opt = el('label');
+    const input = el('input');
+    input.type = 'checkbox'; input.value = b;
+    opt.append(input, el('span', null, b));
+    return opt;
+  }));
+}
+buildBlockers();
+$('qEnergy').replaceWith(segment('energy', 'Hoeveel energie had je?', ENERGY.map((l, i) => [i + 1, l])));
+$('qMood').replaceWith(segment('mood', 'Hoe voel je je?', MOOD.map((l, i) => [i + 1, l])));
+
+$('checkinForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = $('checkinForm');
+  const picked = (name) => form.querySelector(`input[name="${name}"]:checked`)?.value;
+  const answers = {
+    blocks: [...$('qBlocks').querySelectorAll('fieldset')].map((fs, i) => ({ title: fs.dataset.title, kind: fs.dataset.kind, result: picked('b' + i) ?? '' })),
+    energy: Number(picked('energy')) || null,
+    mood: Number(picked('mood')) || null,
+    blockers: [...$('qBlockers').querySelectorAll('input:checked')].map((c) => c.value),
+    note: $('checkinInput').value,
+  };
+  const body = checkinSummary(answers);
+  if (!body) return say($('checkinSaved'), 'Beantwoord minstens één vraag.', false);
+  say($('checkinSaved'), 'Opslaan…');
+  const { error } = await db.from('notes').insert({ kind: 'checkin', body, data: answers });
+  if (error) return say($('checkinSaved'), 'Niet opgeslagen: ' + error.message + '. Je antwoorden staan er nog; probeer opnieuw.', false);
+  form.reset();
+  say($('checkinSaved'), 'Opgeslagen ✓ Je tip voor morgen volgt binnen het uur.');
+  loadNotes();
+});
 
 // ---- render ----
 function focusCard(i, label, when, cls) {
@@ -173,8 +295,14 @@ function noteEl(n) {
   const del = el('button', 'del');
   del.setAttribute('aria-label', 'Notitie verwijderen');
   del.innerHTML = '<svg aria-hidden="true"><use href="#i-x"/></svg>';
-  del.addEventListener('click', () => mutate(db.from('notes').delete().eq('id', n.id)));
-  li.append(check, el('span', 'text', n.body), del);
+  del.addEventListener('click', async () => {
+    if (n.file_path) await db.storage.from('notes').remove([n.file_path]);
+    mutate(db.from('notes').delete().eq('id', n.id));
+  });
+  const content = el('div', 'text');
+  content.append(el('span', null, n.body));
+  if (n.file_path) content.append(filePreview(n));
+  li.append(check, content, del);
   return li;
 }
 
@@ -284,8 +412,11 @@ function render() {
     return wrap;
   }));
   renderCalendar();
+  renderInterview(dayItems(planner, now));
+}
 
-  list($('notes'), notes.filter((n) => n.kind === 'note'), noteEl, 'Nog geen notities. Schrijf hierboven je eerste idee.');
+function renderNotes() {
+  list($('notes'), notes.filter((n) => n.kind === 'note'), noteEl, 'Nog geen notities. Schrijf of voeg hierboven iets toe.');
   list($('checkins'), notes.filter((n) => n.kind === 'checkin'), checkinEl, 'Nog geen avondchecks.');
 }
 

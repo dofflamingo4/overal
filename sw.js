@@ -1,5 +1,5 @@
 // Network first, cached copy when offline; shows push notifications sent by the Supabase "notify" function.
-const CACHE = 'overal-v7';
+const CACHE = 'overal-v8';
 const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'style.css', 'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
@@ -8,7 +8,9 @@ self.addEventListener('activate', (e) => e.waitUntil(
 ));
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(fetch(e.request).then((res) => {
+  // no-cache: always ask the server whether a file changed, so a new index.html never runs with an old app.js
+  // (GitHub Pages lets browsers reuse files for 10 minutes otherwise).
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((res) => {
     const copy = res.clone();
     caches.open(CACHE).then((c) => c.put(e.request, copy));
     return res;

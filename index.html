@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=8"></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -22,6 +22,7 @@
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></symbol>
   </svg>
 
   <form id="login" hidden>
@@ -67,17 +68,29 @@
     <section data-tab="notities" hidden aria-labelledby="title">
       <form id="noteForm" class="add">
         <label for="noteInput" class="sr-only">Nieuwe notitie</label>
-        <input id="noteInput" placeholder="Idee, taak of notitie" maxlength="10000" enterkeyhint="done" required>
-        <button class="icon primary" aria-label="Notitie toevoegen"><svg><use href="#i-plus"/></svg></button>
+        <input id="noteInput" placeholder="Idee, taak of notitie" maxlength="10000" enterkeyhint="done">
+        <input id="noteFile" type="file" accept="image/*,application/pdf,audio/*" hidden>
+        <button type="button" id="noteAttach" class="icon ghost" aria-label="Foto, PDF of spraakmemo toevoegen"><svg><use href="#i-clip"/></svg></button>
+        <button class="icon primary" aria-label="Notitie opslaan"><svg><use href="#i-plus"/></svg></button>
       </form>
+      <p id="noteSaved" class="saved" role="status" aria-live="polite"></p>
+      <p class="hint small">Tip: tik op de microfoon van je toetsenbord om je notitie in te spreken.</p>
       <ul id="notes" class="notes"></ul>
     </section>
 
     <section data-tab="avond" hidden aria-labelledby="title">
       <div id="tomorrowTip"></div>
       <form id="checkinForm" class="checkin">
-        <label for="checkinInput">Wat werkte vandaag, en wat liep vast?</label>
-        <textarea id="checkinInput" rows="4" maxlength="10000" required></textarea>
+        <h2 class="q-head">Hoe ging je dag?</h2>
+        <div id="qBlocks"></div>
+        <div id="qEnergy"></div>
+        <div id="qMood"></div>
+        <fieldset class="q">
+          <legend>Wat hield je tegen? <span class="hint">(kies wat past)</span></legend>
+          <div id="qBlockers" class="seg chips"></div>
+        </fieldset>
+        <label for="checkinInput">Nog iets? <span class="hint">(optioneel)</span></label>
+        <textarea id="checkinInput" rows="2" maxlength="10000"></textarea>
         <button class="primary">Opslaan</button>
         <p id="checkinSaved" class="saved" role="status" aria-live="polite"></p>
       </form>

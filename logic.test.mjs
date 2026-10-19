@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hhmm, mondayIso, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay } from './logic.js';
+import { hhmm, mondayIso, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay, interviewBlocks, checkinSummary } from './logic.js';
+
+test('interview asks about real blocks only and summarises the answers', () => {
+  const items = [{ kind: 'reis', title: 'Trein' }, { kind: 'les', title: 'CaOS' }, { kind: 'studie', title: 'PF', cancelled: true }, { kind: 'werk', title: 'McDo' }];
+  assert.deepEqual(interviewBlocks(items).map((i) => i.title), ['CaOS', 'McDo']);
+  const text = checkinSummary({ blocks: [{ title: 'CaOS', result: 'partly' }, { title: 'McDo', result: '' }], energy: 2, mood: 4, blockers: ['Te moe'], note: '  labo 3 lastig ' });
+  assert.equal(text, 'CaOS: Deels\nEnergie: 2/5\nStemming: 4/5\nTegengehouden door: Te moe\nNog iets: labo 3 lastig');
+  assert.equal(checkinSummary({}), '');
+});
 
 test('appleForDay splits timed and all-day events and merges into the day', () => {
   const tue = new Date(2026, 9, 20, 12, 0);
