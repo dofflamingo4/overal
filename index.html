@@ -43,6 +43,7 @@
     </header>
 
     <section data-tab="vandaag" aria-labelledby="title">
+      <div id="todayTip"></div>
       <ul id="allDay" class="allday"></ul>
       <div id="focus" class="focus" aria-live="polite"></div>
       <ol id="today" class="timeline"></ol>
@@ -73,6 +74,7 @@
     </section>
 
     <section data-tab="avond" hidden aria-labelledby="title">
+      <div id="tomorrowTip"></div>
       <form id="checkinForm" class="checkin">
         <label for="checkinInput">Wat werkte vandaag, en wat liep vast?</label>
         <textarea id="checkinInput" rows="4" maxlength="10000" required></textarea>

@@ -19,6 +19,7 @@ const nowMin = (d) => d.getHours() * 60 + d.getMinutes();
 let planner = null;
 let apple = null; // { events, error } refreshed every 5 min by the Edge Function
 let mail = null;  // { generatedAt, total, items: [{from, subject, summary, action, urgent}] } from the morning cloud routine
+let tip = null;   // { generatedAt, forDate: 'YYYY-MM-DD', text, focus: [] } from the evening coach routine
 let notes = [];
 let feeds = [];
 let lastError = '';
@@ -54,12 +55,13 @@ async function start() {
 }
 
 async function loadPlanner() {
-  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple', 'mail']);
+  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple', 'mail', 'tip']);
   if (error) return showError(error);
   const pick = (source) => data.find((r) => r.source === source)?.data ?? null;
   planner = pick('weekplanner');
   apple = pick('apple');
   mail = pick('mail');
+  tip = pick('tip');
   render();
 }
 
@@ -200,6 +202,22 @@ function renderCalendar() {
     : apple ? `Gekoppeld · ${apple.events.length} afspraken in de komende 2 weken.` : 'Gekoppeld. De afspraken verschijnen binnen enkele minuten.';
 }
 
+function tipEl(label) {
+  const box = el('div', 'tip');
+  const ol = el('ol');
+  ol.append(...(tip.focus ?? []).map((f) => el('li', null, f)));
+  box.append(el('div', 'tag', label), el('p', null, tip.text), ol);
+  return box;
+}
+
+// Written in the evening for the next day: shown as "Tip voor morgen" until midnight, then as today's focus.
+function renderTip(now) {
+  const today = isoToday(now);
+  $('tomorrowTip').replaceChildren(...(tip?.text && tip.forDate > today ? [tipEl('Tip voor morgen')] : []));
+  $('todayTip').replaceChildren(...(tip?.text && tip.forDate === today ? [tipEl('Focus van vandaag')] : []));
+}
+const isoToday = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 function mailEl(m) {
   const li = el('li');
   const from = el('div', 'from', m.from || '');
@@ -245,6 +263,7 @@ function render() {
   list($('deadlinesSoon'), deadlines.filter((d) => d.urgency), deadlineEl, 'Niets dringends in de komende 3 dagen.');
   list($('deadlinesAll'), deadlines, deadlineEl, 'Geen open deadlines.');
   renderMail();
+  renderTip(now);
 
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
   $('week').replaceChildren(...DAYS.map((name, d) => {
