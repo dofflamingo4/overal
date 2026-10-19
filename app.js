@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
 import { hhmm, dayItems, openDeadlines, nowNext, untilText, dueLabel, appleForDay, RESULTS, BLOCKERS, interviewBlocks, checkinSummary } from './logic.js';
+import { replan } from './replan.js';
 
 // The publishable key is meant to be public: Row Level Security limits every row to its owner.
 const db = createClient('https://uizhyrexbiagykzxqmct.supabase.co', 'sb_publishable_a0EhD2sC_LkoRgoR2F4i6A_XDtg455V');
@@ -22,6 +23,7 @@ let mail = null;  // { generatedAt, total, items: [{from, subject, summary, acti
 let tip = null;   // { generatedAt, forDate: 'YYYY-MM-DD', text, focus: [] } from the evening coach routine
 let notes = [];
 let feeds = [];
+let absences = {}; // {'YYYY-MM-DD': 'vrij' | 'ziek'}, shared with the laptop planner through Supabase
 let lastError = '';
 
 // ---- login (sign-ups are closed in Supabase: only the owner's account exists) ----
@@ -44,11 +46,12 @@ let started = false;
 async function start() {
   if (started) return;
   started = true;
-  await Promise.all([loadPlanner(), loadNotes(), loadFeeds()]);
+  await Promise.all([loadPlanner(), loadNotes(), loadFeeds(), loadAbsences()]);
   // Changes made on another device arrive here within a second or two.
   db.channel('sync')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'snapshots' }, loadPlanner)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, loadNotes)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'absences' }, loadAbsences)
     .subscribe();
   setInterval(render, 30_000); // keeps the "now" marker and countdown moving
   document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
@@ -63,6 +66,41 @@ async function loadPlanner() {
   mail = pick('mail');
   tip = pick('tip');
   render();
+}
+
+async function loadAbsences() {
+  const { data, error } = await db.from('absences').select('date, kind');
+  if (error) return showError(error);
+  absences = Object.fromEntries(data.map((a) => [a.date, a.kind]));
+  render();
+}
+
+// "Geen school" / "Ziek" for one day; the plan is recomputed right here on the phone, the laptop follows at its next sync.
+async function setAbsence(date, kind) {
+  const query = kind ? db.from('absences').upsert({ date, kind }, { onConflict: 'user_id,date' }) : db.from('absences').delete().eq('date', date);
+  const { error } = await query;
+  if (error) return showError(error);
+  absences = { ...Object.fromEntries(Object.entries(absences).filter(([d]) => d !== date)), ...(kind ? { [date]: kind } : {}) };
+  render();
+}
+
+const ABSENCE = [['', 'Ja'], ['vrij', 'Geen school'], ['ziek', 'Ziek']];
+// `where` keeps the radio groups apart: today's picker and the same day in Week must not share a name.
+function absencePicker(date, label, where) {
+  const fs = el('fieldset', 'q attend');
+  fs.append(el('legend', null, label));
+  const row = el('div', 'seg');
+  for (const [value, text] of ABSENCE) {
+    const opt = el('label');
+    const input = el('input');
+    input.type = 'radio'; input.name = `att-${where}-${date}`; input.value = value;
+    input.checked = (absences[date] || '') === value;
+    input.addEventListener('change', () => setAbsence(date, value));
+    opt.append(input, el('span', null, text));
+    row.append(opt);
+  }
+  fs.append(row);
+  return fs;
 }
 
 async function loadFeeds() {
@@ -383,8 +421,13 @@ function render() {
   $('dateLine').textContent = now.toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' });
   renderStatus(now.getTime());
 
+  const plan = { weeks: replan(planner, absences, now) };
+  const isoNow = isoToday(now);
+  $('attendToday').replaceChildren(absencePicker(isoNow, 'Vandaag naar school?', 'today'));
+  $('absentNote').textContent = absences[isoNow] === 'ziek' ? 'Ziek: alles voor vandaag is geschrapt. Rust goed uit.'
+    : absences[isoNow] === 'vrij' ? 'Geen school: lessen en treinen zijn geschrapt, studie van later in de week staat nu vandaag.' : '';
   const todayApple = appleForDay(apple?.events, now);
-  const today = dayItems(planner, now, now, todayApple.timed);
+  const today = dayItems(plan, now, now, todayApple.timed);
   $('allDay').replaceChildren(...todayApple.allDay.map((e) => el('li', null, e.title)));
   const { now: current, next } = nowNext(today);
   $('focus').replaceChildren(
@@ -405,14 +448,16 @@ function render() {
     const wrap = el('div', 'day' + (date.toDateString() === now.toDateString() ? ' today' : ''));
     const dayApple = appleForDay(apple?.events, date);
     const ol = el('ol', 'timeline');
-    list(ol, dayItems(planner, date, now, dayApple.timed), blockEl, 'Vrij.');
+    list(ol, dayItems(plan, date, now, dayApple.timed), blockEl, absences[isoToday(date)] === 'ziek' ? 'Ziek: rust goed uit.' : 'Vrij.');
     const chips = el('ul', 'allday');
     chips.append(...dayApple.allDay.map((e) => el('li', null, e.title)));
-    wrap.append(el('h2', null, `${name} ${date.getDate()}/${date.getMonth() + 1}`), chips, ol);
+    const head = el('h2', null, `${name} ${date.getDate()}/${date.getMonth() + 1}`);
+    const isPast = date < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    wrap.append(head, ...(d < 5 && !isPast ? [absencePicker(isoToday(date), 'Naar school?', 'week')] : []), chips, ol);
     return wrap;
   }));
   renderCalendar();
-  renderInterview(dayItems(planner, now));
+  renderInterview(dayItems(plan, now));
 }
 
 function renderNotes() {

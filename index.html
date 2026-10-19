@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
-  <script type="module" src="app.js?v=8"></script>
+  <script type="module" src="app.js?v=9"></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -44,6 +44,8 @@
     </header>
 
     <section data-tab="vandaag" aria-labelledby="title">
+      <div id="attendToday"></div>
+      <p id="absentNote" class="hint absent-note" aria-live="polite"></p>
       <div id="todayTip"></div>
       <ul id="allDay" class="allday"></ul>
       <div id="focus" class="focus" aria-live="polite"></div>

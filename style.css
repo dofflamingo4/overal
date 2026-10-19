@@ -137,6 +137,15 @@ ol, ul { list-style: none; margin: 0; padding: 0; }
 .seg input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
 .seg label:active span { transform: scale(0.97); }
 
+/* attendance: "Vandaag naar school?" and per weekday in Week */
+.attend { margin-bottom: 8px; }
+.attend legend { font-size: 15px; }
+.attend .seg span { min-height: 40px; font-size: 14px; }
+.day .attend { margin: 4px 0 8px; }
+.day .attend legend { font-size: 13px; font-weight: 500; color: var(--muted); }
+.absent-note { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
+.absent-note:empty { display: none; }
+
 /* note attachments */
 .icon.ghost { background: var(--surface); border: 1px solid var(--line); color: var(--text); border-radius: var(--r-sm); min-height: 48px; }
 .hint.small { margin: -8px 0 16px; font-size: 13px; color: var(--muted); }
