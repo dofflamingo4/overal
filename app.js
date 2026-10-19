@@ -18,6 +18,7 @@ const nowMin = (d) => d.getHours() * 60 + d.getMinutes();
 
 let planner = null;
 let apple = null; // { events, error } refreshed every 5 min by the Edge Function
+let mail = null;  // { generatedAt, total, items: [{from, subject, summary, action, urgent}] } from the morning cloud routine
 let notes = [];
 let feeds = [];
 let lastError = '';
@@ -53,10 +54,12 @@ async function start() {
 }
 
 async function loadPlanner() {
-  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple']);
+  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple', 'mail']);
   if (error) return showError(error);
-  planner = data.find((r) => r.source === 'weekplanner')?.data ?? null;
-  apple = data.find((r) => r.source === 'apple')?.data ?? null;
+  const pick = (source) => data.find((r) => r.source === source)?.data ?? null;
+  planner = pick('weekplanner');
+  apple = pick('apple');
+  mail = pick('mail');
   render();
 }
 
@@ -197,6 +200,25 @@ function renderCalendar() {
     : apple ? `Gekoppeld · ${apple.events.length} afspraken in de komende 2 weken.` : 'Gekoppeld. De afspraken verschijnen binnen enkele minuten.';
 }
 
+function mailEl(m) {
+  const li = el('li');
+  const from = el('div', 'from', m.from || '');
+  if (m.urgent) from.append(el('span', 'badge', 'dringend'));
+  li.append(from, el('div', 'subject', m.subject || '(geen onderwerp)'));
+  if (m.summary) li.append(el('div', 'summary', m.summary));
+  if (m.action) li.append(el('div', 'action', '→ ' + m.action));
+  return li;
+}
+
+function renderMail() {
+  $('mailBlock').hidden = !mail?.generatedAt;
+  if (!mail?.generatedAt) return;
+  const at = new Date(mail.generatedAt);
+  const sameDay = at.toDateString() === new Date().toDateString();
+  $('mailMeta').textContent = `Samenvatting van ${sameDay ? '' : at.toLocaleDateString('nl-BE', { weekday: 'long' }) + ' '}${hhmm(nowMin(at))} · ${mail.total ?? 0} mails bekeken`;
+  list($('mail'), mail.items ?? [], mailEl, 'Niets belangrijks in je mail.');
+}
+
 function renderStatus(now) {
   const s = $('synced');
   const at = planner?.syncedAt;
@@ -222,6 +244,7 @@ function render() {
   const deadlines = openDeadlines(planner?.deadlines, now);
   list($('deadlinesSoon'), deadlines.filter((d) => d.urgency), deadlineEl, 'Niets dringends in de komende 3 dagen.');
   list($('deadlinesAll'), deadlines, deadlineEl, 'Geen open deadlines.');
+  renderMail();
 
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
   $('week').replaceChildren(...DAYS.map((name, d) => {
