@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
-  <script type="module" src="app.js?v=9"></script>
+  <script type="module" src="app.js?v=10"></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -22,6 +22,7 @@
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
     <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></symbol>
   </svg>
 
@@ -80,6 +81,18 @@
       <ul id="notes" class="notes"></ul>
     </section>
 
+    <section data-tab="films" hidden aria-labelledby="title">
+      <form id="filmForm" class="add">
+        <label for="filmInput" class="sr-only">Film of serie toevoegen</label>
+        <input id="filmInput" placeholder="Film of serie, bv. Dune nieuwe" maxlength="300" enterkeyhint="send" autocomplete="off">
+        <button class="icon primary" aria-label="Naar de TV sturen"><svg><use href="#i-plus"/></svg></button>
+      </form>
+      <p id="filmMsg" class="saved" role="status" aria-live="polite"></p>
+      <p class="hint small">Typ zoveel als je weet. Hij zoekt zelf de juiste film, het genre, de foto's en of hij op Netflix of Prime staat. Twijfelt hij, dan vraagt hij het hier.</p>
+      <ul id="filmAsk" class="film-ask"></ul>
+      <ul id="films" class="films"></ul>
+    </section>
+
     <section data-tab="avond" hidden aria-labelledby="title">
       <div id="tomorrowTip"></div>
       <form id="checkinForm" class="checkin">
@@ -135,6 +148,7 @@
       <button data-go="deadlines"><svg><use href="#i-flag"/></svg>Deadlines</button>
       <button data-go="notities"><svg><use href="#i-note"/></svg>Notities</button>
       <button data-go="avond"><svg><use href="#i-moon"/></svg>Avond</button>
+      <button data-go="films"><svg><use href="#i-film"/></svg>Films</button>
     </nav>
   </main>
 </body>

@@ -1,5 +1,5 @@
 // Network first, cached copy when offline; shows push notifications sent by the Supabase "notify" function.
-const CACHE = 'overal-v9';
+const CACHE = 'overal-v10';
 const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'style.css', 'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });

@@ -6,7 +6,7 @@ import { replan } from './replan.js';
 const db = createClient('https://uizhyrexbiagykzxqmct.supabase.co', 'sb_publishable_a0EhD2sC_LkoRgoR2F4i6A_XDtg455V');
 
 const DAYS = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
-const TITLES = { vandaag: 'Vandaag', week: 'Deze week', deadlines: 'Deadlines', notities: 'Notities', avond: 'Avondcheck' };
+const TITLES = { vandaag: 'Vandaag', week: 'Deze week', deadlines: 'Deadlines', notities: 'Notities', avond: 'Avondcheck', films: 'Films voor de TV' };
 const KINDS = { les: 'Les', opt: 'Werkcollege', reis: 'Reis', studie: 'Studie', extra: 'Extra', deadline: 'Deadline-werk', werk: 'Werk', apple: 'Agenda' };
 // Same rule as the database check: only Apple's published-calendar links.
 const ICLOUD_FEED = /^(webcal|https):\/\/p\d+-caldav\.icloud\.com\/published\/\d+\/[A-Za-z0-9_=-]+$/;
@@ -46,12 +46,13 @@ let started = false;
 async function start() {
   if (started) return;
   started = true;
-  await Promise.all([loadPlanner(), loadNotes(), loadFeeds(), loadAbsences()]);
+  await Promise.all([loadPlanner(), loadNotes(), loadFeeds(), loadAbsences(), loadFilms()]);
   // Changes made on another device arrive here within a second or two.
   db.channel('sync')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'snapshots' }, loadPlanner)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, loadNotes)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'absences' }, loadAbsences)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'films' }, loadFilms)
     .subscribe();
   setInterval(render, 30_000); // keeps the "now" marker and countdown moving
   document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
@@ -506,6 +507,98 @@ $('pushTest').addEventListener('click', async () => {
   const out = await res.json().catch(() => ({}));
   pushMsg(res.ok && out.sent ? 'Verstuurd. Je zou hem nu moeten zien.' : 'Versturen mislukt' + (out.error ? ': ' + out.error : '.'));
 });
+
+// ---- films for the TV (red button) ----
+// The Edge Function "films" identifies what was typed and fills in genre, images and where to watch;
+// status 'ask' means it wants the user to pick one of up to three posters.
+const FILMS_URL = 'https://uizhyrexbiagykzxqmct.supabase.co/functions/v1/films';
+const TMDB_IMG = 'https://image.tmdb.org/t/p/w185';
+const STRIP_LABEL = { action: 'Action', scifi: 'Sci-fi', thriller: 'Thriller', crime: 'Crime', drame: 'Drama', comedie: 'Komedie', romance: 'Romance', horreur: 'Horror', histoire: 'Geschiedenis', anime: 'Anime', animation: 'Animatie', docu: 'Docu' };
+const SERVICE = { netflix: 'Netflix', prime: 'Prime Video' };
+let films = [];
+
+async function loadFilms() {
+  const { data, error } = await db.from('films').select('id, query, status, media, title, year, genre, poster, providers, candidates, error, created_at')
+    .neq('status', 'seen').order('created_at', { ascending: false });
+  if (error) return showError(error);
+  films = data;
+  renderFilms();
+}
+
+async function filmCall(body) {
+  const { data: { session } } = await db.auth.getSession();
+  const res = await fetch(FILMS_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + session?.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return res.json().catch(() => ({ error: 'geen antwoord' }));
+}
+
+$('filmForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const query = $('filmInput').value.trim();
+  if (!query) return;
+  $('filmInput').disabled = true;
+  say($('filmMsg'), 'Zoeken…');
+  const out = await filmCall({ action: 'add', query });
+  $('filmInput').disabled = false;
+  if (out.error && !out.status) return say($('filmMsg'), 'Niet gelukt: ' + out.error, false);
+  $('filmInput').value = '';
+  say($('filmMsg'), out.status === 'ask' ? 'Welke bedoel je? Kies hieronder.' : out.status === 'error' ? 'Niet gevonden: ' + out.error
+    : out.duplicate ? 'Stond al op je lijst ✓' : `${out.title} staat op je TV ✓`, out.status !== 'error');
+  loadFilms();
+});
+
+function askEl(f) {
+  const li = el('li', 'card');
+  li.append(el('p', 'q', `Welke bedoel je met “${f.query}”?`));
+  const row = el('div', 'choices');
+  for (const c of f.candidates || []) {
+    const b = el('button', 'choice');
+    b.setAttribute('aria-label', `${c.title} (${c.year ?? '?'})`);
+    if (c.poster) { const img = el('img'); img.src = TMDB_IMG + c.poster; img.alt = ''; img.loading = 'lazy'; b.append(img); }
+    b.append(el('span', null, c.title), el('small', null, c.year ?? ''));
+    b.addEventListener('click', async () => {
+      row.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+      const out = await filmCall({ action: 'choose', id: f.id, media: c.media, tmdb_id: c.tmdb_id });
+      say($('filmMsg'), out.error ? 'Niet gelukt: ' + out.error : `${out.title ?? c.title} staat op je TV ✓`, !out.error);
+      loadFilms();
+    });
+    row.append(b);
+  }
+  const del = el('button', 'link', 'Geen van deze');
+  del.addEventListener('click', () => mutate(db.from('films').delete().eq('id', f.id)));
+  li.append(row, del);
+  return li;
+}
+
+function filmEl(f) {
+  const li = el('li', f.status === 'error' ? 'failed' : '');
+  const pic = el('div', 'poster');
+  if (f.poster) { const img = el('img'); img.src = TMDB_IMG + f.poster; img.alt = ''; img.loading = 'lazy'; pic.append(img); }
+  const text = el('div', 'text');
+  if (f.status === 'error') {
+    text.append(el('strong', null, f.query), el('small', null, f.error || 'Niet gevonden'));
+    const retry = el('button', 'link', 'Opnieuw proberen');
+    retry.addEventListener('click', async () => { say($('filmMsg'), 'Zoeken…'); await filmCall({ action: 'retry', id: f.id }); loadFilms(); });
+    text.append(retry);
+  } else if (f.status === 'pending') {
+    text.append(el('strong', null, f.query), el('small', null, 'Zoeken…'));
+  } else {
+    const where = (f.providers || []).map((p) => SERVICE[p]).filter(Boolean).join(' · ') || 'Niet op Netflix of Prime';
+    text.append(el('strong', null, `${f.title}${f.year ? ' (' + f.year + ')' : ''}`), el('small', null, `${STRIP_LABEL[f.genre] ?? f.genre} · ${where}`));
+  }
+  const del = el('button', 'del');
+  del.setAttribute('aria-label', 'Van de lijst halen');
+  del.innerHTML = '<svg aria-hidden="true"><use href="#i-x"/></svg>';
+  del.addEventListener('click', () => mutate(db.from('films').delete().eq('id', f.id)));
+  li.append(pic, text, del);
+  return li;
+}
+
+function renderFilms() {
+  const ask = films.filter((f) => f.status === 'ask');
+  $('filmAsk').replaceChildren(...ask.map(askEl));
+  const rest = films.filter((f) => f.status !== 'ask');
+  $('films').replaceChildren(...(rest.length ? rest.map(filmEl) : [el('li', 'empty', 'Nog niets. Typ hierboven een film of serie.')]));
+}
 
 // ---- tabs ----
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
