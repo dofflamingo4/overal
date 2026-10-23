@@ -164,6 +164,11 @@ ol, ul { list-style: none; margin: 0; padding: 0; }
 .tip p { margin: 4px 0 0; text-wrap: pretty; }
 .tip ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; font-weight: 500; }
 .tip ol:empty { display: none; }
+.brief { margin-bottom: 20px; padding: 18px 18px; border-radius: var(--r); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); }
+.brief .tag { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.brief .brief-head { margin: 6px 0 0; font-size: 17px; font-weight: 600; text-wrap: balance; }
+.brief .brief-lines { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 5px; }
+.brief ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; font-weight: 500; }
 
 /* mail summary */
 .status.plain::before { display: none; }

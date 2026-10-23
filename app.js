@@ -21,6 +21,7 @@ let planner = null;
 let apple = null; // { events, error } refreshed every 5 min by the Edge Function
 let mail = null;  // { generatedAt, total, items: [{from, subject, summary, action, urgent}] } from the morning cloud routine
 let tip = null;   // { generatedAt, forDate: 'YYYY-MM-DD', text, focus: [] } from the evening coach routine
+let brief = null; // { generatedAt, forDate: 'YYYY-MM-DD', headline, lines: [], focus: [] } from the morning boss routine
 let notes = [];
 let feeds = [];
 let absences = {}; // {'YYYY-MM-DD': 'vrij' | 'ziek'}, shared with the laptop planner through Supabase
@@ -59,13 +60,14 @@ async function start() {
 }
 
 async function loadPlanner() {
-  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple', 'mail', 'tip']);
+  const { data, error } = await db.from('snapshots').select('source, data').in('source', ['weekplanner', 'apple', 'mail', 'tip', 'brief']);
   if (error) return showError(error);
   const pick = (source) => data.find((r) => r.source === source)?.data ?? null;
   planner = pick('weekplanner');
   apple = pick('apple');
   mail = pick('mail');
   tip = pick('tip');
+  brief = pick('brief');
   render();
 }
 
@@ -384,6 +386,28 @@ function tipEl(label) {
 }
 
 // Written in the evening for the next day: shown as "Tip voor morgen" until midnight, then as today's focus.
+// Morning boss: one honest briefing for today, shown until midnight.
+function renderBrief(now) {
+  const show = brief?.headline && brief.forDate === isoToday(now);
+  $('briefCard').replaceChildren(...(show ? [briefEl()] : []));
+}
+function briefEl() {
+  const box = el('div', 'brief');
+  box.append(el('div', 'tag', 'Ochtendbriefing'));
+  if (brief.headline) box.append(el('p', 'brief-head', brief.headline));
+  if (brief.lines?.length) {
+    const ul = el('ul', 'brief-lines');
+    ul.append(...brief.lines.map((l) => el('li', null, l)));
+    box.append(ul);
+  }
+  if (brief.focus?.length) {
+    const ol = el('ol');
+    ol.append(...brief.focus.map((f) => el('li', null, f)));
+    box.append(el('div', 'tag', 'Vandaag'), ol);
+  }
+  return box;
+}
+
 function renderTip(now) {
   const today = isoToday(now);
   $('tomorrowTip').replaceChildren(...(tip?.text && tip.forDate > today ? [tipEl('Tip voor morgen')] : []));
@@ -421,6 +445,7 @@ function render() {
   const now = new Date();
   $('dateLine').textContent = now.toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' });
   renderStatus(now.getTime());
+  renderBrief(now);
 
   const plan = { weeks: replan(planner, absences, now) };
   const isoNow = isoToday(now);
