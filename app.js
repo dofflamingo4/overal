@@ -437,8 +437,10 @@ function renderMail() {
 function renderStatus(now) {
   const s = $('synced');
   const at = planner?.syncedAt;
-  s.className = 'status' + (lastError ? ' error' : !at || now - at > STALE_MS ? ' stale' : '');
-  s.textContent = lastError || (at ? 'Laptop bijgewerkt ' + new Date(at).toLocaleString('nl-BE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'Nog geen planner van je laptop ontvangen');
+  const failed = Object.keys(planner?.errors ?? {});
+  const syncError = failed.length ? `Sync faalt voor ${failed.join(', ')}: die info kan oud zijn` : '';
+  s.className = 'status' + (lastError || syncError ? ' error' : !at || now - at > STALE_MS ? ' stale' : '');
+  s.textContent = lastError || syncError || (at ? 'Laptop bijgewerkt ' + new Date(at).toLocaleString('nl-BE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'Nog geen planner van je laptop ontvangen');
 }
 
 function render() {
